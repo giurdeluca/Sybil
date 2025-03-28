@@ -50,6 +50,20 @@ def _get_parser():
     )
 
     parser.add_argument(
+        "--save-individually",
+        default=False,
+        action="store_true",
+        help="Save attention images individually.",
+    )
+
+    parser.add_argument(
+        "--save-gif",
+        default=False,
+        action="store_true",
+        help="Save attention images as a GIF.",
+    )
+
+    parser.add_argument(
         "--file-type",
         default="auto",
         dest="file_type",
@@ -84,6 +98,8 @@ def predict(
     model_name="sybil_ensemble",
     return_attentions=False,
     write_attention_images=False,
+    save_individually=False,
+    save_gif=False,
     file_type: Literal["auto", "dicom", "png"] = "auto",
     threads: int = 0,
 ):
@@ -144,6 +160,8 @@ def predict(
             attentions=prediction.attentions,
             save_directory=output_dir,
             gain=3,
+            save_individually=save_individually,
+            save_gif=save_gif,
         )
 
     return pred_dict, series_with_attention
@@ -161,6 +179,8 @@ def main():
         args.model_name,
         args.return_attentions,
         args.write_attention_images,
+        args.save_individually,
+        args.save_gif,
         file_type=args.file_type,
         threads=args.threads,
     )
