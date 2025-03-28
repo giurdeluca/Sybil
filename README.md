@@ -1,5 +1,19 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/pgmikhael/Sybil/blob/main/LICENSE.txt) ![version](https://img.shields.io/badge/version-1.2.0-success)
 
+# Install
+
+```shell
+git clone https://github.com/reginabarzilaygroup/Sybil.git
+cd Sybil/
+conda create -n <env_name> python=<python_version>
+conda activate <env_name>
+pip install -e .
+```
+for my computational environment (python 3.8)
+```shell
+pip install torch==1.10.1+cu113 torchvision==0.11.2+cu113 -f https://download.pytorch.org/whl/torch_stable.html
+```
+
 # Sybil
 
 Lung Cancer Risk Prediction.
