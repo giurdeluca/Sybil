@@ -18,6 +18,7 @@ fi
 sybil-predict \
 --loglevel DEBUG \
 --output-dir demo_prediction \
+--write-attention-images \
 --return-attentions \
 --save-individually \
 --save-gif \
