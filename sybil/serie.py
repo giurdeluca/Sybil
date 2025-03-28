@@ -190,10 +190,16 @@ class Serie:
             slice_positions = []
             processed_paths = []
             for path in paths:
-                dcm = pydicom.dcmread(path, stop_before_pixels=True)
-                processed_paths.append(path)
-                slice_positions.append(float(dcm.ImagePositionPatient[-1]))
-
+                # Skip non-DICOM files
+                if not path.lower().endswith(('.dcm', '.dicom')):
+                    continue
+                try:
+                    dcm = pydicom.dcmread(path, stop_before_pixels=True)
+                    processed_paths.append(path)
+                    slice_positions.append(float(dcm.ImagePositionPatient[-1]))
+                except pydicom.errors.InvalidDicomError:
+                    # Skip files that can't be read as DICOM
+                    continue
             processed_paths, slice_positions = order_slices(
                 processed_paths, slice_positions
             )
