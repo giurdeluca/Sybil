@@ -19,4 +19,6 @@ sybil-predict \
 --loglevel DEBUG \
 --output-dir demo_prediction \
 --return-attentions \
+--save-individually \
+--save-gif \
 $demo_scan_dir
