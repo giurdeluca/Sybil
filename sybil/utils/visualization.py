@@ -52,6 +52,8 @@ def visualize_attentions(
     attentions: List[Dict[str, np.ndarray]],
     save_directory: str = None,
     gain: int = 3,
+    save_individually: bool = False,
+    save_gif: bool = False
 ) -> List[List[np.ndarray]]:
     """
     Args:
@@ -59,6 +61,8 @@ def visualize_attentions(
         attentions (Dict[str, np.ndarray]): attention dictionary output from model
         save_directory (str, optional): where to save the images. Defaults to None.
         gain (int, optional): how much to scale attention values by for visualization. Defaults to 3.
+        save_individually (bool, optional): whether to save images individually. Defaults to False.
+        save_gif (bool, optional): whether to save images as a GIF. Defaults to False.
 
     Returns:
         List[List[np.ndarray]]: list of list of overlayed images
@@ -77,7 +81,10 @@ def visualize_attentions(
 
         if save_directory is not None:
             save_path = os.path.join(save_directory, f"serie_{serie_idx}")
-            save_images(overlayed_images, save_path, f"serie_{serie_idx}")
+            if save_individually:
+                save_images_individually(overlayed_images, save_path, f"serie_{serie_idx}")
+            if save_gif:
+                save_images(overlayed_images, save_path, f"serie_{serie_idx}")
 
         series_overlays.append(overlayed_images)
     return series_overlays
@@ -99,3 +106,21 @@ def save_images(img_list: List[np.ndarray], directory: str, name: str):
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, f"{name}.gif")
     imageio.mimsave(path, img_list)
+
+def save_images_individually(img_list: List[np.ndarray], directory: str, name: str):
+    """
+    Saves a list of images individually in the specified directory with the given name prefix.
+
+    Args:
+        img_list (List[np.ndarray]): A list of numpy arrays representing the images to be saved.
+        directory (str): The directory where the images should be saved.
+        name (str): The prefix name for the image files.
+
+    Returns:
+        None
+    """
+    os.makedirs(directory, exist_ok=True)
+
+    for idx, img in enumerate(img_list):
+        img_path = os.path.join(directory, f"{name}_image_{idx}.png")
+        Image.fromarray(img).save(img_path)
