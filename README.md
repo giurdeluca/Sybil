@@ -91,6 +91,18 @@ Annotations are availble to download in JSON format [here](https://drive.google.
   ...
 }
 ```
+## How to plot annotation box and seeds
+1. Download the JSON file [here](https://drive.google.com/file/d/19aa5yIHPWu3NtjqvXDc8NYB2Ub9V-4WM/view?usp=share_link)
+
+2. Run convert_annotation_json_to_csv.py
+```bash
+python utils/convert_annotation_json_to_csv.py <path_to_annotation.json> <path_to_annotations.csv>
+```
+
+3. Run extract_annotation_seed.py for calculation of bounding box center and visualization
+```bash
+python utils/extract_annotation_seed.py <dicom_root_folder> <path_to_annotations.csv> <output_folder>
+```
 
 # Attention Scores
 
