@@ -4,18 +4,17 @@ import numpy as np
 import os
 import sys
 import matplotlib
-matplotlib.use('Agg')  # Add this at the start of your script, before importing pyplot
+matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from tqdm import tqdm
 
-# TODO: should check the actual pixel spacing and image origin before plotting the images
-
-def plot_dicom_with_annotations(dcm, seed_x, seed_y, bbox_x, bbox_y, bbox_w, bbox_h, output_path):
-    """Plot and save DICOM slice with the seed point and bounding box."""
+def plot_dicom_with_annotations(dcm, center_x, center_y, bbox_x, bbox_y, bbox_w, bbox_h, output_path):
+    """Plot and save DICOM slice with the center point and bounding box."""
     img = dcm.pixel_array
     fig, ax = plt.subplots(figsize=(8, 8))
-    ax.imshow(img, cmap='gray', origin='lower')
+    # Use origin='upper' for standard top-left coordinate system
+    ax.imshow(img, cmap='gray', origin='upper')
 
     # Overlay the bounding box (green)
     rect = patches.Rectangle(
@@ -23,114 +22,101 @@ def plot_dicom_with_annotations(dcm, seed_x, seed_y, bbox_x, bbox_y, bbox_w, bbo
     )
     ax.add_patch(rect)
 
-    # Overlay the seed point (red star)
-    ax.scatter(seed_x, seed_y, color='red', marker='*', s=20, label='Seed Point')
+    # Overlay the center point (red star)
+    ax.scatter(center_x, center_y, color='red', marker='*', s=50, label='Center Point')
 
-    # Add legend and save image
     ax.legend()
-    plt.title(f"Slice {dcm.InstanceNumber}")
-    # plt.axis("off")
+    plt.title(f"Instance: {dcm.SOPInstanceUID}\nSlice: {dcm.InstanceNumber}")
     full_output_path = os.path.join(output_path, f"Slice-{dcm.InstanceNumber}.png")
-    plt.savefig(full_output_path, bbox_inches='tight', dpi=300)
+    plt.savefig(full_output_path, bbox_inches='tight', dpi=150)
     plt.close()
-    print(f"Successfully saved annotation to: {full_output_path}")
+    # print(f"Successfully saved annotation to: {full_output_path}")
 
 def extract_and_visualize_annotations(dcm, annotations_df, sop_uid, output_path):
-    """Extract seed points and bounding boxes from CSV and overlay them on corresponding DICOM slices."""
-    print(f"Processing annotation for UID: {sop_uid}")
-    
-    # Get the specific row for this DICOM
-    row = annotations_df[annotations_df['Instance UID'] == sop_uid]
-    # Convert normalized coordinates to pixels
-    img_size = dcm.pixel_array.shape[0]  # Get actual image size from DICOM
-    print(f"Image size: {img_size}")
-    
+    """
+    Extracts annotations, visualizes them, and returns the updated DataFrame.
+    """
     try:
-        bbox_x = int(float(row["x"]) * img_size)
-        bbox_y = int(float(row["y"]) * img_size)
-        bbox_w = int(float(row["width"]) * img_size)
-        bbox_h = int(float(row["height"]) * img_size)
+        row = annotations_df.loc[sop_uid]
         
-        print(f"Bounding box coordinates: x={bbox_x}, y={bbox_y}, w={bbox_w}, h={bbox_h}")
+        # Get actual image height and width from DICOM
+        img_height, img_width = dcm.pixel_array.shape
         
-        # Compute seed point at bounding box center
-        seed_x = bbox_x + bbox_w // 2
-        seed_y = bbox_y + bbox_h // 2
-        print(f"Seed point coordinates: x={seed_x}, y={seed_y}")
+        # Convert normalized coordinates to pixel coordinates
+        bbox_x = int(float(row["x"]) * img_width)
+        bbox_y = int(float(row["y"]) * img_height)
+        bbox_w = int(float(row["width"]) * img_width)
+        bbox_h = int(float(row["height"]) * img_height)
+        
+        # Compute center point at bounding box center
+        center_x = bbox_x + bbox_w // 2
+        center_y = bbox_y + bbox_h // 2
         
         # Save plot
-        plot_dicom_with_annotations(dcm, seed_x, seed_y, bbox_x, bbox_y, bbox_w, bbox_h, output_path)
+        plot_dicom_with_annotations(dcm, center_x, center_y, bbox_x, bbox_y, bbox_w, bbox_h, output_path)
         
-    except KeyError as e:
-        print(f"Missing required column in annotations: {e}")
-        print("Available columns:", list(row.index))
+        # Update DataFrame with DICOM path and center coordinates using .loc
+        dcm_path = dcm.filename if hasattr(dcm, 'filename') else 'N/A'
+        annotations_df.loc[sop_uid, ['dcm_path', 'center_x', 'center_y']] = [dcm_path, center_x, center_y]
+
+    except KeyError:
+        # This case is now handled by the initial check in main, but good to keep
+        print(f"No annotation row found for UID: {sop_uid}")
     except Exception as e:
-        print(f"Error processing annotation: {str(e)}")
+        print(f"Error processing annotation for {sop_uid}: {str(e)}")
+    
+    return annotations_df
 
 def main(data_folder, annotations_file, output_folder):
     """Main function to process DICOM files and create annotated visualizations."""
-    print(f"Starting processing with:")
-    print(f"Data folder: {data_folder}")
-    print(f"Annotations file: {annotations_file}")
-    print(f"Output folder: {output_folder}")
+    print(f"Starting processing...\nData folder: {data_folder}\nAnnotations file: {annotations_file}\nOutput folder: {output_folder}")
     
-    # Create output folder if it doesn't exist
     os.makedirs(output_folder, exist_ok=True)
     
-    # Load annotations
     print("Loading annotations...")
     annotations = pd.read_csv(annotations_file)
     print(f"Loaded {len(annotations)} annotations")
+
+    # Pre-add new columns and set index for massive performance gain
+    annotations['dcm_path'] = ''
+    annotations['center_x'] = np.nan
+    annotations['center_y'] = np.nan
+    annotations.set_index('Instance UID', inplace=True)
     
-    # Get list of subjects
-    subjects = [d for d in os.listdir(data_folder) if d.startswith('sub-')]
-    subjects.sort()
-    print(f"Found {len(subjects)} subjects")
-    
-    # Process each subject
-    for patient_folder in tqdm(subjects, desc="Processing patients"):
-        print(f'\nProcessing patient: {patient_folder}')
-        patient_path = os.path.join(data_folder, patient_folder)
-        
+    all_dicom_files = []
+    for root, _, files in os.walk(data_folder):
+        for file in files:
+            if file.endswith('.dcm'):
+                all_dicom_files.append(os.path.join(root, file))
+
+    print(f"Found {len(all_dicom_files)} total DICOM files.")
+
+    for dcm_path in tqdm(all_dicom_files, desc="Processing DICOMs"):
         try:
-            sessions = [d for d in os.listdir(patient_path) if 'ses-' in d]
-            print(f"Found {len(sessions)} sessions for patient {patient_folder}")
+            dcm = pydicom.dcmread(dcm_path, stop_before_pixels=False)
+            sop_uid = dcm.SOPInstanceUID
             
-            for session in sessions:
-                session_folder = os.path.join(patient_path, session)
-                series_folders = [f for f in os.listdir(session_folder) if 'ser-' in f]
-                print(f"Found {len(series_folders)} series in session {session}")
+            # Use fast index lookup
+            if sop_uid in annotations.index:
+                # Create a specific output path for this series to keep images organized
+                relative_path = os.path.relpath(os.path.dirname(dcm_path), data_folder)
+                output_path = os.path.join(output_folder, relative_path)
+                os.makedirs(output_path, exist_ok=True)
                 
-                for series_folder in series_folders:
-                    series_path = os.path.join(session_folder, series_folder)
-                    output_path = os.path.join(output_folder, patient_folder, session, series_folder)
-                    
-                    if os.path.isdir(series_path) and 'ser-' in series_folder and 'None' not in series_folder:
-                        dicom_files = [f for f in os.listdir(series_path) if f.endswith('.dcm')]
-                        print(f"Found {len(dicom_files)} DICOM files in series {series_folder}")
-                        
-                        if dicom_files:
-                            os.makedirs(output_path, exist_ok=True)
-                            
-                            for dicom_file in dicom_files:
-                                try:
-                                    dcm_path = os.path.join(series_path, dicom_file)
-                                    print(f"Reading DICOM file: {dcm_path}")
-                                    dcm = pydicom.dcmread(dcm_path)
-                                    
-                                    if dcm.SOPInstanceUID in annotations['Instance UID'].values:
-                                        print(f"Found matching annotation for {dcm.SOPInstanceUID}")
-                                        extract_and_visualize_annotations(dcm, annotations, dcm.SOPInstanceUID, output_path)
-                                    else:
-                                        print(f'No annotation found for {dcm.SOPInstanceUID}')
-                                
-                                except Exception as e:
-                                    print(f"Error processing {dcm_path}: {str(e)}")
-                                    continue
-                                    
+                # IMPORTANT: Re-assign the DataFrame to capture updates
+                annotations = extract_and_visualize_annotations(dcm, annotations, sop_uid, output_path)
+
         except Exception as e:
-            print(f"Error processing patient {patient_folder}: {str(e)}")
+            print(f"Error reading or processing {dcm_path}: {str(e)}")
             continue
+            
+    # Reset index to turn 'Instance UID' back into a column before saving
+    annotations.reset_index(inplace=True)
+    
+    # Save the updated DataFrame to a new CSV file
+    updated_csv_path = os.path.join(output_folder, 'updated_annotations.csv')
+    annotations.to_csv(updated_csv_path, index=False)
+    print(f"\nProcessing complete. Updated annotations saved to: {updated_csv_path}")
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
@@ -141,10 +127,10 @@ if __name__ == "__main__":
     csv_path = sys.argv[2]
     output_folder = sys.argv[3]
     
-    if not os.path.exists(dicom_root_folder):
+    if not os.path.isdir(dicom_root_folder):
         print(f"Error: DICOM root folder not found: {dicom_root_folder}")
         sys.exit(1)
-    if not os.path.exists(csv_path):
+    if not os.path.isfile(csv_path):
         print(f"Error: CSV file not found: {csv_path}")
         sys.exit(1)
         
